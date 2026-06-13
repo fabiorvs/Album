@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#10261c">
+    <meta name="description" content="Controle pessoal de figurinhas da Copa 2026">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+    <title>Meu Álbum 2026</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <button class="brand" data-view-target="home" aria-label="Ir para o início">
+          <span class="brand-mark">26</span>
+          <span><strong>Meu Álbum</strong><small>Copa 2026</small></span>
+        </button>
+        <div class="topbar-actions">
+          <button class="icon-button" id="theme-toggle" aria-label="Alternar tema">
+            <svg aria-hidden="true"><use href="#icon-sun"></use></svg>
+          </button>
+          <button class="avatar-button" data-view-target="settings" aria-label="Abrir ajustes">FB</button>
+        </div>
+      </header>
+
+      <main>
+        <section class="view active" id="view-home">
+          <article class="hero-card">
+            <div class="hero-copy">
+              <span class="eyebrow">Sua coleção</span>
+              <h1>Rumo ao álbum completo.</h1>
+              <p id="hero-message">Cada figurinha conta.</p>
+            </div>
+            <div class="progress-orbit" id="progress-orbit">
+              <div><strong id="progress-percent">0%</strong><span>completo</span></div>
+            </div>
+            <div class="hero-progress"><span id="hero-progress-bar"></span></div>
+            <div class="hero-stats">
+              <div><span>Tenho</span><strong id="owned-count">0</strong></div>
+              <div><span>Faltam</span><strong id="missing-count">994</strong></div>
+              <div><span>Repetidas</span><strong id="duplicate-count">0</strong></div>
+            </div>
+          </article>
+
+          <section class="quick-add">
+            <div>
+              <span class="eyebrow">Cadastro rápido</span>
+              <h2>Chegou figurinha nova?</h2>
+            </div>
+            <form id="quick-add-form">
+              <label class="search-field">
+                <svg aria-hidden="true"><use href="#icon-search"></use></svg>
+                <input id="quick-add-input" type="text" inputmode="text" autocomplete="off" placeholder="Ex.: BRA10" aria-label="Código da figurinha">
+                <button class="camera-button" id="open-scanner" type="button" aria-label="Ler código com a câmera"><svg aria-hidden="true"><use href="#icon-camera"></use></svg></button>
+                <button type="submit">Adicionar</button>
+              </label>
+            </form>
+            <div class="quick-result" id="quick-result" hidden></div>
+          </section>
+
+          <section class="section-block">
+            <div class="section-heading">
+              <div><span class="eyebrow">Visão geral</span><h2>Progresso por grupo</h2></div>
+              <button class="text-button" data-view-target="album">Ver álbum</button>
+            </div>
+            <div class="group-grid" id="group-grid"></div>
+          </section>
+
+          <section class="section-block">
+            <div class="section-heading">
+              <div><span class="eyebrow">Na reta final</span><h2>Mais perto de completar</h2></div>
+            </div>
+            <div class="ranking-list" id="ranking-list"></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-album">
+          <div class="page-heading">
+            <div><span class="eyebrow">994 figurinhas</span><h1>Meu álbum</h1><p>Toque para registrar ou repetir. Toque e segure para remover.</p></div>
+          </div>
+          <div class="sticky-tools">
+            <label class="search-field compact">
+              <svg aria-hidden="true"><use href="#icon-search"></use></svg>
+              <input id="album-search" type="search" placeholder="Buscar país ou código..." aria-label="Buscar no álbum">
+            </label>
+            <div class="chip-row" id="group-filters"></div>
+          </div>
+          <div class="album-list" id="album-list"></div>
+          <div class="empty-state" id="album-empty" hidden>
+            <span>?</span><h3>Nada por aqui</h3><p>Tente buscar outro país ou código.</p>
+          </div>
+        </section>
+
+        <section class="view" id="view-missing">
+          <div class="page-heading">
+            <div><span class="eyebrow">Lista de caça</span><h1>Figurinhas que faltam</h1><p id="missing-subtitle">Sua lista atualizada para completar o álbum.</p></div>
+            <button class="action-button" id="share-missing"><svg aria-hidden="true"><use href="#icon-share"></use></svg>Compartilhar</button>
+          </div>
+          <div class="sticky-tools">
+            <label class="search-field compact">
+              <svg aria-hidden="true"><use href="#icon-search"></use></svg>
+              <input id="missing-search" type="search" placeholder="Buscar nas que faltam..." aria-label="Buscar figurinhas que faltam">
+            </label>
+          </div>
+          <div class="code-list" id="missing-list"></div>
+        </section>
+
+        <section class="view" id="view-duplicates">
+          <div class="page-heading">
+            <div><span class="eyebrow">Hora de trocar</span><h1>Repetidas</h1><p id="duplicates-subtitle">Todas as suas figurinhas extras em um só lugar.</p></div>
+            <button class="action-button" id="share-duplicates"><svg aria-hidden="true"><use href="#icon-share"></use></svg>Compartilhar</button>
+          </div>
+          <div class="code-list" id="duplicates-list"></div>
+        </section>
+
+        <section class="view" id="view-settings">
+          <div class="page-heading">
+            <div><span class="eyebrow">Seus dados</span><h1>Ajustes</h1><p>O álbum fica salvo somente neste aparelho.</p></div>
+          </div>
+          <div class="settings-card">
+            <div class="settings-row"><div class="settings-icon"><svg><use href="#icon-download"></use></svg></div><div><strong>Exportar backup</strong><span>Baixe uma cópia da sua coleção.</span></div><button id="export-data">Exportar</button></div>
+            <div class="settings-row"><div class="settings-icon"><svg><use href="#icon-upload"></use></svg></div><div><strong>Importar backup</strong><span>Restaure um arquivo exportado.</span></div><button id="import-data">Importar</button><input id="import-file" type="file" accept="application/json" hidden></div>
+            <div class="settings-row danger"><div class="settings-icon"><svg><use href="#icon-trash"></use></svg></div><div><strong>Limpar coleção</strong><span>Apague todos os registros deste aparelho.</span></div><button id="clear-data">Limpar</button></div>
+          </div>
+          <article class="about-card"><span class="brand-mark">26</span><div><strong>Meu Álbum 2026</strong><p>Feito para acompanhar as 994 figurinhas do controle original.</p></div></article>
+        </section>
+      </main>
+
+      <nav class="bottom-nav" aria-label="Navegação principal">
+        <button class="active" data-view-target="home"><svg><use href="#icon-home"></use></svg><span>Início</span></button>
+        <button data-view-target="album"><svg><use href="#icon-grid"></use></svg><span>Álbum</span></button>
+        <button data-view-target="missing"><svg><use href="#icon-target"></use></svg><span>Faltam</span></button>
+        <button data-view-target="duplicates"><svg><use href="#icon-copy"></use></svg><span>Repetidas</span></button>
+      </nav>
+    </div>
+
+    <div class="toast" id="toast" role="status"></div>
+    <div class="modal-backdrop" id="confirm-modal" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <span class="modal-mark">!</span><h2 id="modal-title">Limpar coleção?</h2><p>Essa ação apaga todas as quantidades registradas neste aparelho.</p>
+        <div><button class="secondary-button" id="cancel-clear">Cancelar</button><button class="danger-button" id="confirm-clear">Sim, limpar</button></div>
+      </div>
+    </div>
+    <div class="scanner-modal" id="scanner-modal" hidden>
+      <header>
+        <button class="scanner-icon-button" id="close-scanner" aria-label="Fechar câmera"><svg><use href="#icon-close"></use></svg></button>
+        <div><strong>Leitor de figurinha</strong><span>Aponte para o código impresso</span></div>
+        <button class="scanner-icon-button" id="toggle-flash" aria-label="Alternar lanterna" hidden><svg><use href="#icon-flash"></use></svg></button>
+      </header>
+      <div class="scanner-stage">
+        <video id="scanner-video" playsinline muted></video>
+        <div class="scanner-guide"><span></span><span></span><span></span><span></span><strong>Centralize somente o código</strong></div>
+        <div class="scanner-loading" id="scanner-loading"><span class="spinner"></span><strong>Preparando leitor...</strong><small>Na primeira vez pode levar alguns segundos</small></div>
+      </div>
+      <canvas id="scanner-canvas" hidden></canvas>
+      <section class="scanner-sheet">
+        <div class="scanner-status" id="scanner-status"><span class="scanner-pulse"></span><div><strong>Procurando código...</strong><small>Mantenha a câmera firme e com boa iluminação</small></div></div>
+        <div class="scanner-result" id="scanner-result" hidden></div>
+        <div class="scanner-actions">
+          <button class="secondary-button" id="scan-now"><svg><use href="#icon-camera"></use></svg>Ler agora</button>
+          <button class="scanner-add-button" id="scanner-add" hidden>Adicionar figurinha</button>
+        </div>
+        <p>O reconhecimento acontece no aparelho. Nenhuma imagem é enviada.</p>
+      </section>
+    </div>
+
+    <svg class="svg-sprite" aria-hidden="true">
+      <symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V10Z"/></symbol>
+      <symbol id="icon-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
+      <symbol id="icon-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v3m9 6h-3m-6 9v-3m-9-6h3"/></symbol>
+      <symbol id="icon-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+      <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+      <symbol id="icon-share" viewBox="0 0 24 24"><path d="M12 16V3m0 0L7 8m5-5 5 5M5 13v7h14v-7"/></symbol>
+      <symbol id="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+      <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M4 19h16"/></symbol>
+      <symbol id="icon-upload" viewBox="0 0 24 24"><path d="M12 16V4m0 0 5 5m-5-5L7 9M4 20h16"/></symbol>
+      <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M4 7h16m-10 4v6m4-6v6M9 7l1-3h4l1 3m3 0-1 14H7L6 7"/></symbol>
+      <symbol id="icon-camera" viewBox="0 0 24 24"><path d="M4 7h4l2-3h4l2 3h4v12H4V7Z"/><circle cx="12" cy="13" r="4"/></symbol>
+      <symbol id="icon-close" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5 5 19"/></symbol>
+      <symbol id="icon-flash" viewBox="0 0 24 24"><path d="m13 2-8 12h7l-1 8 8-12h-7l1-8Z"/></symbol>
+    </svg>
+    <script src="vendor/tesseract/tesseract.min.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
