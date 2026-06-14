@@ -7,7 +7,7 @@
     <meta name="description" content="Controle pessoal de figurinhas da Copa 2026">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=111">
     <title>Meu Álbum 2026</title>
   </head>
   <body>
@@ -50,12 +50,13 @@
               <h2>Chegou figurinha nova?</h2>
             </div>
             <form id="quick-add-form">
-              <label class="search-field">
+              <label class="search-field quick-search-field">
                 <svg aria-hidden="true"><use href="#icon-search"></use></svg>
-                <input id="quick-add-input" type="text" inputmode="text" autocomplete="off" placeholder="Ex.: BRA10" aria-label="Código da figurinha">
+                <input id="quick-add-input" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="Ex.: BRA10" aria-label="Código da figurinha" aria-controls="quick-suggestions" aria-expanded="false">
                 <button class="camera-button" id="open-scanner" type="button" aria-label="Ler código com a câmera"><svg aria-hidden="true"><use href="#icon-camera"></use></svg></button>
-                <button type="submit">Adicionar</button>
+                <button type="submit">Buscar</button>
               </label>
+              <div class="quick-suggestions" id="quick-suggestions" hidden></div>
             </form>
             <div class="quick-result" id="quick-result" hidden></div>
           </section>
@@ -78,7 +79,7 @@
 
         <section class="view" id="view-album">
           <div class="page-heading">
-            <div><span class="eyebrow">994 figurinhas</span><h1>Meu álbum</h1><p>Toque para registrar ou repetir. Toque e segure para remover.</p></div>
+            <div><span class="eyebrow">994 figurinhas</span><h1>Meu álbum</h1><p>Toque para adicionar. Segure até ficar vermelho para remover.</p></div>
           </div>
           <div class="sticky-tools">
             <label class="search-field compact">
@@ -151,15 +152,16 @@
       </header>
       <div class="scanner-stage">
         <video id="scanner-video" playsinline muted></video>
-        <div class="scanner-guide"><span></span><span></span><span></span><span></span><strong>Centralize somente o código</strong></div>
+        <canvas id="scanner-photo" hidden></canvas>
+        <div class="scanner-guide"><span></span><span></span><span></span><span></span><i></i><strong>Enquadre o verso inteiro da figurinha</strong></div>
         <div class="scanner-loading" id="scanner-loading"><span class="spinner"></span><strong>Preparando leitor...</strong><small>Na primeira vez pode levar alguns segundos</small></div>
       </div>
       <canvas id="scanner-canvas" hidden></canvas>
       <section class="scanner-sheet">
-        <div class="scanner-status" id="scanner-status"><span class="scanner-pulse"></span><div><strong>Procurando código...</strong><small>Mantenha a câmera firme e com boa iluminação</small></div></div>
+        <div class="scanner-status" id="scanner-status"><span class="scanner-pulse"></span><div><strong>Pronto para fotografar</strong><small>Enquadre o verso e alinhe o código na área laranja</small></div></div>
         <div class="scanner-result" id="scanner-result" hidden></div>
         <div class="scanner-actions">
-          <button class="secondary-button" id="scan-now"><svg><use href="#icon-camera"></use></svg>Ler agora</button>
+          <button class="secondary-button capture-button" id="scan-now"><svg><use href="#icon-camera"></use></svg>Capturar e ler</button>
           <button class="scanner-add-button" id="scanner-add" hidden>Adicionar figurinha</button>
         </div>
         <p>O reconhecimento acontece no aparelho. Nenhuma imagem é enviada.</p>
@@ -180,8 +182,9 @@
       <symbol id="icon-camera" viewBox="0 0 24 24"><path d="M4 7h4l2-3h4l2 3h4v12H4V7Z"/><circle cx="12" cy="13" r="4"/></symbol>
       <symbol id="icon-close" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5 5 19"/></symbol>
       <symbol id="icon-flash" viewBox="0 0 24 24"><path d="m13 2-8 12h7l-1 8 8-12h-7l1-8Z"/></symbol>
+      <symbol id="icon-next" viewBox="0 0 24 24"><path d="m8 5 7 7-7 7m8-14v14"/></symbol>
     </svg>
-    <script src="vendor/tesseract/tesseract.min.js"></script>
-    <script src="app.js"></script>
+    <script src="vendor/tesseract/tesseract.min.js?v=111"></script>
+    <script src="app.js?v=111"></script>
   </body>
 </html>

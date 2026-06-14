@@ -24,14 +24,14 @@ const sections = [
 const allStickers = sections.flatMap(section => section.stickers);
 const total = allStickers.length;
 const byCode = new Map(sections.flatMap(section => section.stickers.map(code => [code, section])));
+const byPrefix = new Map(sections.map(section => [section.code, section]));
 let collection = loadCollection();
 let activeGroup = "Todos";
 let toastTimer;
-let longPressTimer;
-let longPressHandled = false;
+let longPressState;
+let suppressedStickerClick;
 let scannerStream;
 let scannerWorker;
-let scannerTimer;
 let scannerBusy = false;
 let scannerCode = "";
 let flashEnabled = false;
@@ -137,7 +137,8 @@ function renderAlbum() {
 
 function stickerButton(code) {
   const quantity = collection[code] || 0;
-  return `<button class="sticker ${quantity ? "owned" : ""} ${quantity > 1 ? "has-duplicates" : ""}" data-sticker="${code}" data-quantity="${quantity}">${code}</button>`;
+  const action = quantity ? `Você tem ${quantity}. Segure para remover uma unidade.` : "Você ainda não tem. Toque para adicionar.";
+  return `<button class="sticker ${quantity ? "owned" : ""} ${quantity > 1 ? "has-duplicates" : ""}" data-sticker="${code}" data-quantity="${quantity}" aria-label="${code}. ${action}" title="${action}">${code}</button>`;
 }
 
 function renderCodeLists() {
@@ -173,22 +174,75 @@ function showToast(message) {
   toastTimer = setTimeout(() => toast.classList.remove("show"), 2200);
 }
 
-function quickAdd(event) {
-  event.preventDefault();
+function showQuickLookup(code) {
   const input = $("#quick-add-input");
-  const code = normalize(input.value);
   const result = $("#quick-result");
   if (!byCode.has(code)) {
     result.hidden = false;
     result.innerHTML = `<strong>${code || "Código vazio"}</strong> não foi encontrado no álbum. Confira e tente novamente.`;
     return;
   }
-  setQuantity(code, (collection[code] || 0) + 1);
   const section = byCode.get(code);
+  const quantity = collection[code] || 0;
   result.hidden = false;
-  result.innerHTML = `<strong>${code}</strong> registrada em ${section.name}. Agora você tem ${collection[code]} ${collection[code] === 1 ? "unidade" : "unidades"}.`;
-  input.value = "";
-  input.focus();
+  result.innerHTML = `<div class="quick-result-card"><span class="country-badge">${section.code}</span><div><strong>${code}: ${quantity ? `você tem ${quantity}` : "está faltando"}</strong><small>${section.name} · ${section.group === "Extra" ? "Especial" : `Grupo ${section.group}`}</small></div><button data-quick-add="${code}">${quantity ? "Adicionar outra" : "Adicionar"}</button></div>`;
+  input.value = code;
+  hideQuickSuggestions();
+}
+
+function quickAdd(event) {
+  event.preventDefault();
+  showQuickLookup(normalize($("#quick-add-input").value).replace(/\s+/g, ""));
+}
+
+function setQuickInputMode(query) {
+  const input = $("#quick-add-input");
+  const numeric = [...byPrefix.keys()].some(prefix => query.startsWith(prefix) && query.length >= prefix.length);
+  const nextMode = numeric ? "numeric" : "text";
+  if (input.inputMode === nextMode) return;
+  input.inputMode = nextMode;
+  if (document.activeElement === input) {
+    input.blur();
+    requestAnimationFrame(() => {
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    });
+  }
+}
+
+function hideQuickSuggestions() {
+  $("#quick-suggestions").hidden = true;
+  $("#quick-add-input").setAttribute("aria-expanded", "false");
+}
+
+function renderQuickSuggestions() {
+  const input = $("#quick-add-input");
+  const query = normalize(input.value).replace(/[^A-Z0-9]/g, "");
+  input.value = query;
+  setQuickInputMode(query);
+  const suggestions = $("#quick-suggestions");
+  if (!query) {
+    hideQuickSuggestions();
+    return;
+  }
+
+  const exactPrefix = byPrefix.get(query);
+  const matchingCodes = /\d/.test(query) ? allStickers.filter(code => code.startsWith(query)).slice(0, 10) : [];
+  const matchingSections = sections
+    .filter(section => section.code.startsWith(query) || normalize(section.name).startsWith(query))
+    .sort((a, b) => Number(b.code.startsWith(query)) - Number(a.code.startsWith(query)) || a.code.localeCompare(b.code))
+    .slice(0, 8);
+  const codes = exactPrefix ? exactPrefix.stickers : matchingCodes;
+  const items = codes.length ? codes : matchingSections;
+  suggestions.innerHTML = codes.length
+    ? codes.map(code => {
+      const section = byCode.get(code);
+      const quantity = collection[code] || 0;
+      return `<button type="button" class="quick-suggestion" data-quick-code="${code}"><span class="country-badge">${section.code}</span><div><strong>${code}</strong><small>${section.name}</small></div><span>${quantity ? `Tenho ${quantity}` : "Falta"}</span></button>`;
+    }).join("")
+    : items.map(section => `<button type="button" class="quick-suggestion" data-quick-prefix="${section.code}"><span class="country-badge">${section.code}</span><div><strong>${section.code}</strong><small>${section.name}</small></div><span>Ver números</span></button>`).join("");
+  suggestions.hidden = !items.length;
+  input.setAttribute("aria-expanded", String(Boolean(items.length)));
 }
 
 function updateScannerStatus(title, copy) {
@@ -227,13 +281,42 @@ function editDistance(a, b) {
   return row[b.length];
 }
 
+function stickerTextChunks(text) {
+  const normalized = normalize(text);
+  const joinedCodes = [...normalized.matchAll(/([A-Z]{2,4})[\s:_-]*([0-9OILSBGDQZ]{1,2})/g)].map(match => `${match[1]}${match[2]}`);
+  const rawChunks = [...joinedCodes, ...(normalized.match(/[A-Z0-9]{2,10}/g) || [])];
+  const chunks = [...new Set(rawChunks.flatMap(chunk => {
+    const simplified = chunk.replaceAll("IVI", "M").replace(/^I(?=[A-Z]{3,4}[0-9])/, "").replace(/K(?=[0-9OILSBGDQZ]{1,2}$)/, "R");
+    const suffix = simplified.match(/([A-Z]+)([0-9OILSBGDQZ]{1,2})$/);
+    if (!suffix) return [chunk, simplified];
+    const [, letters, number] = suffix;
+    return [chunk, simplified, ...[2, 3, 4].filter(length => letters.length >= length).map(length => `${letters.slice(-length)}${number}`)];
+  }))];
+  return { rawChunks, chunks };
+}
+
+function scoreStickerCodes(text) {
+  const { rawChunks, chunks } = stickerTextChunks(text);
+  const scores = new Map();
+  const addScore = (code, score) => scores.set(code, Math.max(scores.get(code) || 0, score));
+  rawChunks.filter(chunk => byCode.has(chunk)).forEach(code => addScore(code, 6));
+  chunks.filter(chunk => byCode.has(chunk)).forEach(code => addScore(code, 3));
+
+  const numberLookalikes = { O: "0", D: "0", I: "1", L: "1", Z: "2", S: "5", B: "8", G: "9", Q: "9" };
+  allStickers.forEach(code => {
+    if (chunks.some(chunk => chunk.length === code.length && [...code].every((character, index) => character === chunk[index] || (/\d/.test(character) && numberLookalikes[chunk[index]] === character)))) addScore(code, 2);
+    else if (chunks.some(chunk => chunk.length === code.length && editDistance(chunk, code) === 1)) addScore(code, 1);
+  });
+  return scores;
+}
+
 function findStickerCode(text) {
-  const chunks = normalize(text).match(/[A-Z0-9]{2,8}/g) || [];
+  const { chunks } = stickerTextChunks(text);
   for (const chunk of chunks) {
     if (byCode.has(chunk)) return chunk;
   }
 
-  const numberLookalikes = { O: "0", I: "1", L: "1", S: "5", B: "8" };
+  const numberLookalikes = { O: "0", D: "0", I: "1", L: "1", Z: "2", S: "5", B: "8", G: "9", Q: "9" };
   const corrected = allStickers.filter(code => chunks.some(chunk => {
     if (chunk.length !== code.length) return false;
     return [...code].every((character, index) => character === chunk[index] || (/\d/.test(character) && numberLookalikes[chunk[index]] === character));
@@ -244,6 +327,74 @@ function findStickerCode(text) {
   return fuzzy.length === 1 ? fuzzy[0] : "";
 }
 
+function stickerGuideSourceRect(video) {
+  const stageRect = $(".scanner-stage").getBoundingClientRect();
+  const guideRect = $(".scanner-guide").getBoundingClientRect();
+  const scale = Math.max(stageRect.width / video.videoWidth, stageRect.height / video.videoHeight);
+  const renderedWidth = video.videoWidth * scale;
+  const renderedHeight = video.videoHeight * scale;
+  const offsetX = (stageRect.width - renderedWidth) / 2;
+  const offsetY = (stageRect.height - renderedHeight) / 2;
+  return {
+    x: Math.max(0, (guideRect.left - stageRect.left - offsetX) / scale),
+    y: Math.max(0, (guideRect.top - stageRect.top - offsetY) / scale),
+    width: Math.min(video.videoWidth, guideRect.width / scale),
+    height: Math.min(video.videoHeight, guideRect.height / scale)
+  };
+}
+
+function createOCRImage(source, sticker, region, filter = "grayscale(1) contrast(1.7)") {
+  const canvas = document.createElement("canvas");
+  const sourceX = sticker.x + sticker.width * region.x;
+  const sourceY = sticker.y + sticker.height * region.y;
+  const sourceWidth = sticker.width * region.width;
+  const sourceHeight = sticker.height * region.height;
+  const padding = 70;
+  const contentWidth = 1400;
+  const contentHeight = Math.round(contentWidth * sourceHeight / sourceWidth);
+  canvas.width = contentWidth + padding * 2;
+  canvas.height = contentHeight + padding * 2;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  context.fillStyle = "white";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.filter = filter;
+  context.drawImage(source, sourceX, sourceY, sourceWidth, sourceHeight, padding, padding, contentWidth, contentHeight);
+  return canvas;
+}
+
+function binarizeOCRImage(source, invert = false) {
+  const canvas = document.createElement("canvas");
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  context.drawImage(source, 0, 0);
+  const image = context.getImageData(0, 0, canvas.width, canvas.height);
+  let average = 0;
+  for (let index = 0; index < image.data.length; index += 4) average += image.data[index];
+  average /= image.data.length / 4;
+  for (let index = 0; index < image.data.length; index += 4) {
+    let value = image.data[index] > average * .92 ? 255 : 0;
+    if (invert) value = 255 - value;
+    image.data[index] = value;
+    image.data[index + 1] = value;
+    image.data[index + 2] = value;
+  }
+  context.putImageData(image, 0, 0);
+  return canvas;
+}
+
+function createOCRCandidates(source, sticker) {
+  const codeRegion = { x: .38, y: 0, width: .62, height: .27 };
+  const topBand = { x: 0, y: 0, width: 1, height: .31 };
+  const codeGray = createOCRImage(source, sticker, codeRegion);
+  return [
+    { image: codeGray, pageMode: "7", label: "tarja" },
+    { image: createOCRImage(source, sticker, codeRegion, "grayscale(1) contrast(1.8) invert(1)"), pageMode: "7", label: "tarja invertida" },
+    { image: binarizeOCRImage(codeGray), pageMode: "7", label: "tarja em alto contraste" },
+    { image: createOCRImage(source, sticker, topBand, "grayscale(1) contrast(1.5)"), pageMode: "6", label: "faixa superior" }
+  ];
+}
+
 function showScannerResult(code) {
   scannerCode = code;
   const section = byCode.get(code);
@@ -252,8 +403,22 @@ function showScannerResult(code) {
   $("#scanner-result").innerHTML = `<span class="country-badge">${section.code}</span><div><strong>${code}</strong><small>${section.name} · ${section.group === "Extra" ? "Especial" : `Grupo ${section.group}`}</small></div><span>${quantity ? `Você tem ${quantity}` : "Está faltando"}</span>`;
   $("#scanner-add").hidden = false;
   $("#scanner-add").textContent = quantity ? "Adicionar outra" : "Adicionar figurinha";
+  $("#scan-now").classList.remove("capture-button");
+  $("#scan-now").innerHTML = `<svg><use href="#icon-camera"></use></svg>Tirar outra`;
   updateScannerStatus("Código encontrado", quantity ? "Ela já está na sua coleção" : "Você ainda não possui esta figurinha");
   navigator.vibrate?.(45);
+}
+
+function resetScannerPhoto(copy = "Enquadre o verso e alinhe o código na área laranja") {
+  scannerCode = "";
+  $("#scanner-result").hidden = true;
+  $("#scanner-add").hidden = true;
+  $("#scanner-photo").hidden = true;
+  $("#scanner-video").hidden = false;
+  $(".scanner-guide").hidden = false;
+  $("#scan-now").classList.add("capture-button");
+  $("#scan-now").innerHTML = `<svg><use href="#icon-camera"></use></svg>Capturar e ler`;
+  updateScannerStatus("Pronto para fotografar", copy);
 }
 
 async function scanCameraFrame() {
@@ -261,28 +426,50 @@ async function scanCameraFrame() {
   const video = $("#scanner-video");
   if (!video.videoWidth) return;
   scannerBusy = true;
+  const sticker = stickerGuideSourceRect(video);
+  const photo = $("#scanner-photo");
+  photo.width = video.videoWidth;
+  photo.height = video.videoHeight;
+  photo.getContext("2d").drawImage(video, 0, 0);
+  photo.hidden = false;
+  video.hidden = true;
+  $(".scanner-guide").hidden = true;
+  $("#scan-now").disabled = true;
+  $("#scan-now").classList.remove("capture-button");
+  $("#scan-now").innerHTML = `<span class="spinner"></span>Processando foto`;
   try {
-    const canvas = $("#scanner-canvas");
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-    const cropWidth = Math.round(video.videoWidth * .82);
-    const cropHeight = Math.round(video.videoHeight * .28);
-    const sourceX = Math.round((video.videoWidth - cropWidth) / 2);
-    const sourceY = Math.round((video.videoHeight - cropHeight) / 2);
-    canvas.width = 1200;
-    canvas.height = Math.round(1200 * cropHeight / cropWidth);
-    context.filter = "grayscale(1) contrast(1.8)";
-    context.drawImage(video, sourceX, sourceY, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
     const worker = await prepareScannerWorker();
-    const { data } = await worker.recognize(canvas);
-    const code = findStickerCode(data.text);
+    const candidates = createOCRCandidates(photo, sticker);
+    const readings = [];
+    const totals = new Map();
+    const occurrences = new Map();
+    for (let index = 0; index < candidates.length; index += 1) {
+      const candidate = candidates[index];
+      updateScannerStatus("Analisando foto...", `Tentativa ${index + 1} de ${candidates.length}: ${candidate.label}`);
+      await worker.setParameters({ tessedit_pageseg_mode: candidate.pageMode });
+      const { data } = await worker.recognize(candidate.image);
+      readings.push(data.text);
+      scoreStickerCodes(data.text).forEach((score, code) => {
+        totals.set(code, (totals.get(code) || 0) + score);
+        occurrences.set(code, (occurrences.get(code) || 0) + 1);
+      });
+    }
+    const ranked = [...totals].sort((a, b) => b[1] - a[1]);
+    const [best, second] = ranked;
+    const code = best && occurrences.get(best[0]) >= 2 && best[1] >= 6 && best[1] - (second?.[1] || 0) >= 2 ? best[0] : "";
     if (code) showScannerResult(code);
-    else updateScannerStatus("Procurando código...", "Aproxime, centralize o código e mantenha firme");
+    else {
+      $("#scan-now").innerHTML = `<svg><use href="#icon-camera"></use></svg>Tirar outra`;
+      const readText = normalize(readings.join(" ")).replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim().slice(0, 28);
+      updateScannerStatus("Código não encontrado", readText ? `O leitor enxergou: ${readText}` : "Aproxime a figurinha e evite reflexos na tarja");
+    }
   } catch (error) {
     console.error(error);
+    $("#scan-now").innerHTML = `<svg><use href="#icon-camera"></use></svg>Tirar outra`;
     updateScannerStatus("Não consegui ler", "Tente aproximar a câmera ou melhorar a iluminação");
   } finally {
     scannerBusy = false;
-    if (scannerStream && !$("#scanner-modal").hidden) scannerTimer = setTimeout(scanCameraFrame, scannerCode ? 4000 : 1800);
+    $("#scan-now").disabled = false;
   }
 }
 
@@ -292,10 +479,11 @@ async function openScanner() {
   $("#scanner-result").hidden = true;
   $("#scanner-add").hidden = true;
   scannerCode = "";
+  resetScannerPhoto();
   document.body.style.overflow = "hidden";
   try {
     scannerStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 2560 }, height: { ideal: 1440 }, focusMode: { ideal: "continuous" } },
       audio: false
     });
     const video = $("#scanner-video");
@@ -305,8 +493,7 @@ async function openScanner() {
     $("#toggle-flash").hidden = !track.getCapabilities?.().torch;
     await prepareScannerWorker();
     $("#scanner-loading").hidden = true;
-    updateScannerStatus("Procurando código...", "Mantenha a câmera firme e com boa iluminação");
-    scanCameraFrame();
+    updateScannerStatus("Pronto para fotografar", "Enquadre o verso e alinhe o código na área laranja");
   } catch (error) {
     console.error(error);
     $("#scanner-loading").hidden = true;
@@ -316,7 +503,6 @@ async function openScanner() {
 }
 
 function closeScanner() {
-  clearTimeout(scannerTimer);
   scannerStream?.getTracks().forEach(track => track.stop());
   scannerStream = null;
   flashEnabled = false;
@@ -379,6 +565,25 @@ function importData(file) {
 }
 
 document.addEventListener("click", event => {
+  const quickPrefix = event.target.closest("[data-quick-prefix]");
+  if (quickPrefix) {
+    $("#quick-add-input").value = quickPrefix.dataset.quickPrefix;
+    renderQuickSuggestions();
+    $("#quick-add-input").focus();
+  }
+
+  const quickCode = event.target.closest("[data-quick-code]");
+  if (quickCode) showQuickLookup(quickCode.dataset.quickCode);
+
+  const quickAddButton = event.target.closest("[data-quick-add]");
+  if (quickAddButton) {
+    const code = quickAddButton.dataset.quickAdd;
+    setQuantity(code, (collection[code] || 0) + 1);
+    showQuickLookup(code);
+  }
+
+  if (!event.target.closest("#quick-add-form")) hideQuickSuggestions();
+
   const nav = event.target.closest("[data-view-target]");
   if (nav) navigate(nav.dataset.viewTarget);
 
@@ -396,8 +601,8 @@ document.addEventListener("click", event => {
   }
 
   const sticker = event.target.closest("[data-sticker]");
-  if (sticker && !longPressHandled) setQuantity(sticker.dataset.sticker, (collection[sticker.dataset.sticker] || 0) + 1);
-  longPressHandled = false;
+  const stickerClickSuppressed = sticker && suppressedStickerClick?.code === sticker.dataset.sticker && Date.now() < suppressedStickerClick.until;
+  if (sticker && !stickerClickSuppressed) setQuantity(sticker.dataset.sticker, (collection[sticker.dataset.sticker] || 0) + 1);
 
   const missing = event.target.closest("[data-add-missing]");
   if (missing) setQuantity(missing.dataset.addMissing, 1);
@@ -409,39 +614,62 @@ document.addEventListener("click", event => {
 document.addEventListener("pointerdown", event => {
   const sticker = event.target.closest("[data-sticker]");
   if (!sticker) return;
-  longPressHandled = false;
-  longPressTimer = setTimeout(() => {
-    longPressHandled = true;
-    const code = sticker.dataset.sticker;
-    if (collection[code]) {
-      setQuantity(code, collection[code] - 1);
-      navigator.vibrate?.(35);
-    } else {
-      showToast(`${code} ainda não foi adicionada`);
-    }
-  }, 550);
+  cancelLongPress();
+  sticker.classList.add("long-pressing");
+  longPressState = {
+    sticker,
+    startX: event.clientX,
+    startY: event.clientY,
+    timer: setTimeout(() => {
+      suppressedStickerClick = { code: sticker.dataset.sticker, until: Date.now() + 800 };
+      sticker.classList.remove("long-pressing");
+      sticker.classList.add("removing");
+      longPressState = null;
+      const code = sticker.dataset.sticker;
+      if (collection[code]) {
+        const next = collection[code] - 1;
+        setQuantity(code, next, false);
+        showToast(next ? `${code}: uma unidade removida` : `${code} removida da coleção`);
+        navigator.vibrate?.([35, 30, 35]);
+      } else {
+        showToast(`${code} ainda não foi adicionada`);
+      }
+    }, 650)
+  };
 });
 
-document.addEventListener("pointerup", () => clearTimeout(longPressTimer));
-document.addEventListener("pointercancel", () => clearTimeout(longPressTimer));
-document.addEventListener("pointermove", () => clearTimeout(longPressTimer));
+function cancelLongPress() {
+  if (!longPressState) return;
+  clearTimeout(longPressState.timer);
+  longPressState.sticker.classList.remove("long-pressing");
+  longPressState = null;
+}
+
+document.addEventListener("pointerup", cancelLongPress);
+document.addEventListener("pointercancel", cancelLongPress);
+document.addEventListener("pointermove", event => {
+  if (!longPressState) return;
+  const distance = Math.hypot(event.clientX - longPressState.startX, event.clientY - longPressState.startY);
+  if (distance > 18) cancelLongPress();
+});
 document.addEventListener("contextmenu", event => {
   if (event.target.closest("[data-sticker]")) event.preventDefault();
 });
 
 $("#quick-add-form").addEventListener("submit", quickAdd);
+$("#quick-add-input").addEventListener("input", renderQuickSuggestions);
+$("#quick-add-input").addEventListener("focus", renderQuickSuggestions);
 $("#open-scanner").addEventListener("click", openScanner);
 $("#close-scanner").addEventListener("click", closeScanner);
 $("#toggle-flash").addEventListener("click", toggleFlash);
 $("#scan-now").addEventListener("click", () => {
-  scannerCode = "";
-  clearTimeout(scannerTimer);
-  scanCameraFrame();
+  if (!$("#scanner-photo").hidden) resetScannerPhoto("Ajuste a próxima figurinha e capture quando estiver nítida");
+  else scanCameraFrame();
 });
 $("#scanner-add").addEventListener("click", () => {
   if (!scannerCode) return;
   setQuantity(scannerCode, (collection[scannerCode] || 0) + 1);
-  showScannerResult(scannerCode);
+  resetScannerPhoto("Figurinha adicionada. Enquadre a próxima");
 });
 $("#album-search").addEventListener("input", renderAlbum);
 $("#missing-search").addEventListener("input", renderCodeLists);
